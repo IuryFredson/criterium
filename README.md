@@ -50,5 +50,6 @@ The API starts on `http://127.0.0.1:3333` by default.
 
 ```bash
 npm run check
+npm test
 npm run build
 ```
