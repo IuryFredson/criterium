@@ -1,3 +1,4 @@
+import { parseJobProfile, type JobRequirement } from "../core/job.js";
 import { calculateOverallScore, buildCategoryScores, type Check } from "../core/report.js";
 import { diffSkills, findSkills, type SkillMatch } from "../core/skills.js";
 import { hasEmail, normalizeText } from "../core/text.js";
@@ -8,6 +9,7 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
   const jobText = normalizeText(input.jobText);
   const targetRole = input.targetRole ? normalizeText(input.targetRole) : undefined;
 
+  const jobProfile = parseJobProfile(input.jobText);
   const jobSkills = findSkills(jobText);
   const resumeSkills = findSkills(resumeText);
   const { found, missing } = diffSkills(jobSkills, resumeSkills);
@@ -16,7 +18,8 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
     targetRole,
     jobSkills,
     foundSkills: found,
-    missingSkills: missing
+    missingSkills: missing,
+    missingRequiredSkills: getMissingRequiredSkills(jobProfile.requiredSkills, found)
   });
 
   return {
@@ -26,10 +29,12 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
       checks
     }),
     targetRole: input.targetRole ?? null,
+    jobProfile,
     summary: {
       requiredSkills: jobSkills.length,
       matchedSkills: found.length,
-      missingSkills: missing.length
+      missingSkills: missing.length,
+      requiredSkillGaps: getMissingRequiredSkills(jobProfile.requiredSkills, found).length
     },
     categoryScores: buildCategoryScores(jobSkills, found),
     foundKeywords: found.map((skill) => skill.name),
@@ -44,6 +49,7 @@ function buildChecks(input: {
   jobSkills: SkillMatch[];
   foundSkills: SkillMatch[];
   missingSkills: SkillMatch[];
+  missingRequiredSkills: JobRequirement[];
 }): Check[] {
   const checks: Check[] = [];
 
@@ -63,7 +69,16 @@ function buildChecks(input: {
     });
   }
 
-  for (const skill of input.missingSkills.slice(0, 8)) {
+  for (const skill of input.missingRequiredSkills.slice(0, 8)) {
+    checks.push({
+      level: "fail",
+      code: "MISSING_REQUIRED_KEYWORD",
+      message: `The job marks ${skill.skill} as required, but the resume does not mention it.`
+    });
+  }
+
+  const missingRequiredNames = new Set(input.missingRequiredSkills.map((skill) => skill.skill));
+  for (const skill of input.missingSkills.filter((skill) => !missingRequiredNames.has(skill.name)).slice(0, 8)) {
     checks.push({
       level: "warn",
       code: "MISSING_KEYWORD",
@@ -88,4 +103,10 @@ function buildChecks(input: {
   }
 
   return checks;
+}
+
+function getMissingRequiredSkills(requiredSkills: JobRequirement[], foundSkills: SkillMatch[]) {
+  const foundNames = new Set(foundSkills.map((skill) => skill.name));
+
+  return requiredSkills.filter((skill) => !foundNames.has(skill.skill));
 }

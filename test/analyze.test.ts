@@ -17,7 +17,7 @@ describe("analyzeResumeForJob", () => {
 
     expect(result.foundKeywords).toEqual(expect.arrayContaining(["Node.js", "TypeScript", "Docker", "REST"]));
     expect(result.missingKeywords).toEqual(expect.arrayContaining(["PostgreSQL", "AWS"]));
-    expect(result.summary).toEqual({ requiredSkills: 6, matchedSkills: 4, missingSkills: 2 });
+    expect(result.summary).toEqual({ requiredSkills: 6, matchedSkills: 4, missingSkills: 2, requiredSkillGaps: 2 });
     expect(result.categoryScores).toContainEqual({ category: "database", found: 0, required: 1, score: 0 });
   });
 
@@ -34,4 +34,32 @@ describe("analyzeResumeForJob", () => {
       message: "Resume does not include a detectable email address."
     });
   });
+});
+
+it("promotes missing required skills to fail checks", () => {
+  const result = analyzeResumeForJob({
+    resumeText,
+    jobText: `
+      Backend Developer
+      Requirements:
+      - Must have Node.js, TypeScript, PostgreSQL and AWS experience.
+    `,
+    targetRole: "Backend Developer"
+  });
+
+  expect(result.summary.requiredSkillGaps).toBe(2);
+  expect(result.checks).toEqual(
+    expect.arrayContaining([
+      {
+        level: "fail",
+        code: "MISSING_REQUIRED_KEYWORD",
+        message: "The job marks PostgreSQL as required, but the resume does not mention it."
+      },
+      {
+        level: "fail",
+        code: "MISSING_REQUIRED_KEYWORD",
+        message: "The job marks AWS as required, but the resume does not mention it."
+      }
+    ])
+  );
 });
