@@ -1,7 +1,8 @@
 import { parseJobProfile, type JobRequirement } from "../core/job.js";
 import { calculateOverallScore, buildCategoryScores, type Check } from "../core/report.js";
+import { parseResumeProfile, type ResumeProfile } from "../core/resume.js";
 import { diffSkills, findSkills, type SkillMatch } from "../core/skills.js";
-import { hasEmail, normalizeText } from "../core/text.js";
+import { normalizeText } from "../core/text.js";
 import type { AnalyzeRequest } from "../schemas/analyze.js";
 
 export function analyzeResumeForJob(input: AnalyzeRequest) {
@@ -10,16 +11,19 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
   const targetRole = input.targetRole ? normalizeText(input.targetRole) : undefined;
 
   const jobProfile = parseJobProfile(input.jobText);
+  const resumeProfile = parseResumeProfile(input.resumeText);
   const jobSkills = findSkills(jobText);
-  const resumeSkills = findSkills(resumeText);
+  const resumeSkills = resumeProfile.skills;
   const { found, missing } = diffSkills(jobSkills, resumeSkills);
+  const missingRequiredSkills = getMissingRequiredSkills(jobProfile.requiredSkills, found);
   const checks = buildChecks({
     resumeText,
     targetRole,
+    resumeProfile,
     jobSkills,
     foundSkills: found,
     missingSkills: missing,
-    missingRequiredSkills: getMissingRequiredSkills(jobProfile.requiredSkills, found)
+    missingRequiredSkills
   });
 
   return {
@@ -30,11 +34,14 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
     }),
     targetRole: input.targetRole ?? null,
     jobProfile,
+    resumeProfile,
     summary: {
       requiredSkills: jobSkills.length,
       matchedSkills: found.length,
       missingSkills: missing.length,
-      requiredSkillGaps: getMissingRequiredSkills(jobProfile.requiredSkills, found).length
+      requiredSkillGaps: missingRequiredSkills.length,
+      resumeSkills: resumeSkills.length,
+      resumeExperienceYears: resumeProfile.experienceYears
     },
     categoryScores: buildCategoryScores(jobSkills, found),
     foundKeywords: found.map((skill) => skill.name),
@@ -46,6 +53,7 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
 function buildChecks(input: {
   resumeText: string;
   targetRole?: string;
+  resumeProfile: ResumeProfile;
   jobSkills: SkillMatch[];
   foundSkills: SkillMatch[];
   missingSkills: SkillMatch[];
@@ -86,11 +94,27 @@ function buildChecks(input: {
     });
   }
 
-  if (!hasEmail(input.resumeText)) {
+  if (input.resumeProfile.contact.emails.length === 0) {
     checks.push({
       level: "fail",
       code: "MISSING_EMAIL",
       message: "Resume does not include a detectable email address."
+    });
+  }
+
+  if (!input.resumeProfile.signals.hasExperienceSection) {
+    checks.push({
+      level: "warn",
+      code: "MISSING_EXPERIENCE_SECTION",
+      message: "Resume does not include a detectable experience section."
+    });
+  }
+
+  if (!input.resumeProfile.signals.hasSkillsSection) {
+    checks.push({
+      level: "warn",
+      code: "MISSING_SKILLS_SECTION",
+      message: "Resume does not include a detectable skills section."
     });
   }
 

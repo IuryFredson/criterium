@@ -4,7 +4,16 @@ import { analyzeResumeForJob } from "../src/services/analyze.js";
 const resumeText = `
   Iury Developer
   iury@example.com
-  Backend Developer with Node.js, TypeScript, Docker and REST APIs experience.
+  https://github.com/iury
+
+  Summary
+  Backend Developer with 4 years of experience.
+
+  Skills
+  Node.js, TypeScript, Docker, REST APIs
+
+  Experience
+  Built backend systems with Node.js and TypeScript.
 `;
 
 const jobText = `
@@ -12,18 +21,34 @@ const jobText = `
 `;
 
 describe("analyzeResumeForJob", () => {
-  it("returns deterministic keyword gaps and category scores", () => {
+  it("returns deterministic keyword gaps, category scores, and resume profile", () => {
     const result = analyzeResumeForJob({ resumeText, jobText, targetRole: "Backend Developer" });
 
     expect(result.foundKeywords).toEqual(expect.arrayContaining(["Node.js", "TypeScript", "Docker", "REST"]));
     expect(result.missingKeywords).toEqual(expect.arrayContaining(["PostgreSQL", "AWS"]));
-    expect(result.summary).toEqual({ requiredSkills: 6, matchedSkills: 4, missingSkills: 2, requiredSkillGaps: 2 });
+    expect(result.summary).toMatchObject({
+      requiredSkills: 6,
+      matchedSkills: 4,
+      missingSkills: 2,
+      requiredSkillGaps: 2,
+      resumeSkills: 4,
+      resumeExperienceYears: 4
+    });
+    expect(result.resumeProfile.contact.emails).toEqual(["iury@example.com"]);
+    expect(result.resumeProfile.signals.hasExperienceSection).toBe(true);
     expect(result.categoryScores).toContainEqual({ category: "database", found: 0, required: 1, score: 0 });
   });
 
   it("flags missing contact email", () => {
     const result = analyzeResumeForJob({
-      resumeText: "Backend Developer with Node.js, TypeScript and Docker experience across production systems.",
+      resumeText: `
+        Summary
+        Backend Developer with Node.js, TypeScript and Docker experience across production systems.
+        Skills
+        Node.js, TypeScript, Docker
+        Experience
+        Built APIs.
+      `,
       jobText,
       targetRole: "Backend Developer"
     });
@@ -34,32 +59,55 @@ describe("analyzeResumeForJob", () => {
       message: "Resume does not include a detectable email address."
     });
   });
-});
 
-it("promotes missing required skills to fail checks", () => {
-  const result = analyzeResumeForJob({
-    resumeText,
-    jobText: `
-      Backend Developer
-      Requirements:
-      - Must have Node.js, TypeScript, PostgreSQL and AWS experience.
-    `,
-    targetRole: "Backend Developer"
+  it("promotes missing required skills to fail checks", () => {
+    const result = analyzeResumeForJob({
+      resumeText,
+      jobText: `
+        Backend Developer
+        Requirements:
+        - Must have Node.js, TypeScript, PostgreSQL and AWS experience.
+      `,
+      targetRole: "Backend Developer"
+    });
+
+    expect(result.summary.requiredSkillGaps).toBe(2);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        {
+          level: "fail",
+          code: "MISSING_REQUIRED_KEYWORD",
+          message: "The job marks PostgreSQL as required, but the resume does not mention it."
+        },
+        {
+          level: "fail",
+          code: "MISSING_REQUIRED_KEYWORD",
+          message: "The job marks AWS as required, but the resume does not mention it."
+        }
+      ])
+    );
   });
 
-  expect(result.summary.requiredSkillGaps).toBe(2);
-  expect(result.checks).toEqual(
-    expect.arrayContaining([
-      {
-        level: "fail",
-        code: "MISSING_REQUIRED_KEYWORD",
-        message: "The job marks PostgreSQL as required, but the resume does not mention it."
-      },
-      {
-        level: "fail",
-        code: "MISSING_REQUIRED_KEYWORD",
-        message: "The job marks AWS as required, but the resume does not mention it."
-      }
-    ])
-  );
+  it("flags missing resume structure sections", () => {
+    const result = analyzeResumeForJob({
+      resumeText: "Iury Developer iury@example.com Backend Developer with Node.js and TypeScript.",
+      jobText,
+      targetRole: "Backend Developer"
+    });
+
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        {
+          level: "warn",
+          code: "MISSING_EXPERIENCE_SECTION",
+          message: "Resume does not include a detectable experience section."
+        },
+        {
+          level: "warn",
+          code: "MISSING_SKILLS_SECTION",
+          message: "Resume does not include a detectable skills section."
+        }
+      ])
+    );
+  });
 });
