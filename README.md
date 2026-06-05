@@ -38,6 +38,24 @@ Example response:
 }
 ```
 
+### `POST /analyze-file`
+
+Analyzes uploaded resume documents. The request must use `multipart/form-data`.
+
+Fields:
+
+- `resumeFile`: required `.txt`, `.pdf`, or `.docx` file.
+- `jobText`: job description text. Required unless `jobFile` is provided.
+- `jobFile`: optional `.txt`, `.pdf`, or `.docx` job description file.
+- `targetRole`: optional target role text.
+
+```bash
+curl -X POST http://127.0.0.1:3333/analyze-file \
+  -F "resumeFile=.pdf" \
+  -F "jobText=Backend Developer with Node.js and PostgreSQL" \
+  -F "targetRole=Backend Developer"
+```
+
 ## Development
 
 ```bash
