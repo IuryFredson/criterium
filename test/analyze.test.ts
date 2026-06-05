@@ -37,6 +37,16 @@ describe("analyzeResumeForJob", () => {
     expect(result.resumeProfile.contact.emails).toEqual(["iury@example.com"]);
     expect(result.resumeProfile.signals.hasExperienceSection).toBe(true);
     expect(result.categoryScores).toContainEqual({ category: "database", found: 0, required: 1, score: 0 });
+    expect(result.dimensionScores).toEqual(
+      expect.arrayContaining([
+        { dimension: "keywords", score: 67, status: "warn" },
+        { dimension: "required", score: 67, status: "warn" },
+        { dimension: "contact", score: 100, status: "pass" },
+        { dimension: "structure", score: 100, status: "pass" },
+        { dimension: "role", score: 100, status: "pass" }
+      ])
+    );
+    expect(result.actions[0]).toMatchObject({ priority: "high", code: "MISSING_REQUIRED_KEYWORD" });
   });
 
   it("flags missing contact email", () => {

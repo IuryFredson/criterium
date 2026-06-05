@@ -1,5 +1,11 @@
 import { parseJobProfile, type JobRequirement } from "../core/job.js";
-import { calculateOverallScore, buildCategoryScores, type Check } from "../core/report.js";
+import {
+  buildCategoryScores,
+  buildDimensionScores,
+  buildPrioritizedActions,
+  calculateOverallScore,
+  type Check
+} from "../core/report.js";
 import { parseResumeProfile, type ResumeProfile } from "../core/resume.js";
 import { diffSkills, findSkills, type SkillMatch } from "../core/skills.js";
 import { normalizeText } from "../core/text.js";
@@ -9,6 +15,7 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
   const resumeText = normalizeText(input.resumeText);
   const jobText = normalizeText(input.jobText);
   const targetRole = input.targetRole ? normalizeText(input.targetRole) : undefined;
+  const targetRoleMatched = targetRole ? resumeText.includes(targetRole) : true;
 
   const jobProfile = parseJobProfile(input.jobText);
   const resumeProfile = parseResumeProfile(input.resumeText);
@@ -17,8 +24,7 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
   const { found, missing } = diffSkills(jobSkills, resumeSkills);
   const missingRequiredSkills = getMissingRequiredSkills(jobProfile.requiredSkills, found);
   const checks = buildChecks({
-    resumeText,
-    targetRole,
+    targetRoleMatched,
     resumeProfile,
     jobSkills,
     foundSkills: found,
@@ -44,6 +50,14 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
       resumeExperienceYears: resumeProfile.experienceYears
     },
     categoryScores: buildCategoryScores(jobSkills, found),
+    dimensionScores: buildDimensionScores({
+      requiredSkillCount: jobSkills.length,
+      foundSkillCount: found.length,
+      requiredSkillGapCount: missingRequiredSkills.length,
+      resumeProfile,
+      targetRoleMatched
+    }),
+    actions: buildPrioritizedActions(checks),
     foundKeywords: found.map((skill) => skill.name),
     missingKeywords: missing.map((skill) => skill.name),
     checks
@@ -51,8 +65,7 @@ export function analyzeResumeForJob(input: AnalyzeRequest) {
 }
 
 function buildChecks(input: {
-  resumeText: string;
-  targetRole?: string;
+  targetRoleMatched: boolean;
   resumeProfile: ResumeProfile;
   jobSkills: SkillMatch[];
   foundSkills: SkillMatch[];
@@ -118,7 +131,7 @@ function buildChecks(input: {
     });
   }
 
-  if (input.targetRole && !input.resumeText.includes(input.targetRole)) {
+  if (!input.targetRoleMatched) {
     checks.push({
       level: "warn",
       code: "TARGET_ROLE_NOT_EXPLICIT",
