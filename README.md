@@ -56,6 +56,19 @@ curl -X POST http://127.0.0.1:3333/analyze-file \
   -F "targetRole=Backend Developer"
 ```
 
+## CLI
+
+```bash
+npm run build
+node dist/cli.js analyze --resume resume.pdf --job job.txt --target-role "Backend Developer"
+```
+
+During development:
+
+```bash
+npm run dev:cli -- analyze --resume resume.txt --job job.txt
+```
+
 ## Development
 
 ```bash
