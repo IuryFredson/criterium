@@ -4,11 +4,16 @@ import path from "node:path";
 import { analyzeResumeForJob } from "./services/analyze.js";
 import { extractTextFromDocument } from "./services/extractText.js";
 
+type AnalyzeResult = ReturnType<typeof analyzeResumeForJob>;
+
+type OutputFormat = "json" | "summary";
+
 export type CliOptions = {
   command: "analyze";
   resumePath: string;
   jobPath: string;
   targetRole?: string;
+  format: OutputFormat;
   pretty: boolean;
 };
 
@@ -18,11 +23,13 @@ export async function main(argv = process.argv.slice(2)) {
     const [resumeText, jobText] = await Promise.all([readDocumentText(options.resumePath), readDocumentText(options.jobPath)]);
     const result = analyzeResumeForJob({ resumeText, jobText, targetRole: options.targetRole });
 
-    process.stdout.write(JSON.stringify(result, null, options.pretty ? 2 : 0));
+    process.stdout.write(formatResult(result, options));
     process.stdout.write("\n");
+    process.exitCode = result.actions.some((action) => action.priority === "high") ? 2 : 0;
   } catch (error) {
     if (error instanceof CliError) {
-      process.stderr.write(`${error.message}\n`);
+      const output = error.exitCode === 0 ? process.stdout : process.stderr;
+      output.write(`${error.message}\n`);
       process.exitCode = error.exitCode;
       return;
     }
@@ -46,6 +53,7 @@ export function parseArgs(argv: string[]): CliOptions {
   const resumePath = values.get("resume") ?? values.get("r");
   const jobPath = values.get("job") ?? values.get("j");
   const targetRole = values.get("target-role");
+  const format = parseFormat(values.get("format") ?? "json");
 
   if (!resumePath) {
     throw new CliError("Missing required option: --resume <file>", 1);
@@ -60,8 +68,36 @@ export function parseArgs(argv: string[]): CliOptions {
     resumePath,
     jobPath,
     targetRole,
+    format,
     pretty: !values.has("compact")
   };
+}
+
+export function formatResult(result: AnalyzeResult, options: Pick<CliOptions, "format" | "pretty">) {
+  if (options.format === "json") {
+    return JSON.stringify(result, null, options.pretty ? 2 : 0);
+  }
+
+  const dimensions = result.dimensionScores
+    .map((dimension) => `- ${dimension.dimension}: ${dimension.score} (${dimension.status})`)
+    .join("\n");
+  const missing = result.missingKeywords.length > 0 ? result.missingKeywords.join(", ") : "None";
+  const actions = result.actions.slice(0, 5).map((action) => `- [${action.priority}] ${action.title}: ${action.detail}`).join("\n");
+
+  return [
+    `criterium report`,
+    `overallScore: ${result.overallScore}`,
+    `targetRole: ${result.targetRole ?? "not provided"}`,
+    `matchedSkills: ${result.summary.matchedSkills}/${result.summary.requiredSkills}`,
+    `requiredSkillGaps: ${result.summary.requiredSkillGaps}`,
+    `missingKeywords: ${missing}`,
+    ``,
+    `dimensionScores:`,
+    dimensions,
+    ``,
+    `actions:`,
+    actions || "- None"
+  ].join("\n");
 }
 
 class CliError extends Error {
@@ -111,8 +147,14 @@ function parseFlags(args: string[]) {
   return values;
 }
 
+function parseFormat(value: string): OutputFormat {
+  if (value === "json" || value === "summary") return value;
+
+  throw new CliError("Invalid --format value. Expected json or summary.", 1);
+}
+
 function usage() {
-  return `Usage:\n  criterium analyze --resume <file> --job <file> [--target-role <role>] [--compact]\n\nSupported files: .txt, .pdf, .docx`;
+  return `Usage:\n  criterium analyze --resume <file> --job <file> [--target-role <role>] [--format json|summary] [--compact]\n\nSupported files: .txt, .pdf, .docx\nExit code 2 means the report contains high-priority actions.`;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

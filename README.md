@@ -60,14 +60,16 @@ curl -X POST http://127.0.0.1:3333/analyze-file \
 
 ```bash
 npm run build
-node dist/cli.js analyze --resume resume.pdf --job job.txt --target-role "Backend Developer"
+node dist/cli.js analyze --resume resume.pdf --job job.txt --target-role "Backend Developer" --format summary
 ```
 
 During development:
 
 ```bash
-npm run dev:cli -- analyze --resume resume.txt --job job.txt
+npm run dev:cli -- analyze --resume resume.txt --job job.txt --format summary
 ```
+
+Use `--format json` for machine-readable output. Exit code `2` means the report contains high-priority actions.
 
 ## Development
 
